@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+chainlit
+PyJWT
+python-multipart
+httpx
+openai
+langchain
+langchain-community
+langchain-openai
+langchain-milvus
+asyncpg
+docx2txt
+pypdf

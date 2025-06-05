@@ -1,0 +1,8 @@
+query_date,user_email,total_queries_by_user
+2025-02-27,pod_admin1@123.com,8
+2025-02-28,analog_test_user@123.com,12
+2025-02-28,ethernovia_test_user@123.com,22
+2025-02-28,pod_admin1@123.com,21
+2025-03-02,pod_admin1@123.com,15
+2025-03-03,pod_admin1@123.com,2
+2025-03-04,analog_test_user@123.com,4

@@ -1,0 +1,28 @@
+a[href*='https://github.com/Chainlit/chainlit'] {
+    visibility: hidden;
+}
+
+#readme-button {
+    display: none;
+}
+
+#theme-toggle {
+    display: none;
+}
+
+/* Hide every child inside the built-with link */
+a.watermark > * {
+    display: none !important;
+  }
+  
+/* Inject your own footer text in its place */
+a.watermark::after {
+    content: "ElevateOps: Elevating Operations to the Next Level — Powered by OptIT";
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 8px 0;
+    font-size: 13px;
+    color: #888;
+}
+  

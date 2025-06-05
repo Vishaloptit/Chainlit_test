@@ -1,0 +1,138 @@
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    volumes:
+      - ./chainlit-datalayer-main/.data/postgres:/var/lib/postgresql/data
+      - ./chainlit-datalayer-main/init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-root}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-root}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    ports:
+      - ${POSTGRES_PORT:-5432}:5432
+    networks:
+      - app-network
+
+  # ---------------------------------------------------------------------------
+  # Keycloak
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:20.0.5
+    container_name: keycloak
+    command: start-dev
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # clear on-disk cache so sessions are invalidated
+        rm -rf /opt/keycloak/data/*
+
+        # exec the real Keycloak start script against Postgres
+        exec /opt/keycloak/bin/kc.sh start-dev \
+          --db postgres \
+          --db-url jdbc:postgresql://postgres:5432/login_db \
+          --db-username ${POSTGRES_USER:-root} \
+          --db-password ${POSTGRES_PASSWORD:-root}
+    environment:
+      - KC_HTTP_RESPONSE_HEADERS=Access-Control-Allow-Origin:*
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin123
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/login_db
+      - KC_DB_USERNAME=${POSTGRES_USER:-root}
+      - KC_DB_PASSWORD=${POSTGRES_USER:-root}
+      - KC_FEATURES=admin-fine-grained-authz
+      # CORS Configuration (Keycloak-specific settings)
+      - KC_HTTP_CORS_ORIGINS=http://192.168.123.128:3000  # Explicitly allow your front>
+      - KC_HTTP_CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS  # Required for to>
+      - KC_HTTP_CORS_ALLOWED_HEADERS=Content-Type,Authorization,Origin,Accept
+      - KC_HTTP_CORS_EXPOSED_HEADERS=Location
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - standalone
+      - etcd
+      - minio
+    networks:
+      - app-network
+
+  # ---------------------------------------------------------------------------
+  # Milvus
+  # ---------------------------------------------------------------------------
+  standalone:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.4.13-hotfix
+    command: ["milvus", "run", "standalone"]
+    depends_on:
+      - etcd
+      - minio
+    ports:
+      - "19530:19530"  # Milvus gRPC port
+      - "9091:9091"    # Milvus HTTP port
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-network
+
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - ./.data/etcd:/etcd
+    networks:
+      - app-network
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    command: minio server /minio_data --console-address ":9001"
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./.data/minio:/minio_data
+    networks:
+      - app-network
+
+  # ---------------------------------------------------------------------------
+  # Chainlit/FastAPI App
+  # ---------------------------------------------------------------------------
+  chainlit:
+    container_name: chainlit
+    build:
+      context: .       # Path to your main Chainlit folder (where Dockerfile is)
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app         # Mount your current folder to /app in the container
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - keycloak
+      - standalone
+      - etcd
+      - minio
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
